@@ -375,7 +375,7 @@ st.markdown("**Carga total**")
 st.latex(r"Q = \lambda\,L = \lambda(\pi a)")
 
 st.markdown("**Campo elétrico no centro do meio arco**")
-st.latex(r"E_x(0) = \frac{Q}{2\pi^2\varepsilon_0 a^2}")
+st.latex(r"E_x = \frac{Q}{2\pi^2\varepsilon_0 a^2}")
 
 st.markdown("**Permissividade do vácuo**")
 st.latex(r"\varepsilon_0 = 8,8\times10^{-12}\ \text{C}^2/\text{N·m}^2")
@@ -395,10 +395,10 @@ st.latex(
 )
 
 st.latex(
-    rf"E_x(0) = \frac{{{fmt_latex_10(Q,'C',sig=4)}}}{{2\pi^2\left(8,8\times10^{{-12}}\right)\left({fmt_dec_pt(a,3)}\right)^2}}"
+    rf"E_x = \frac{{{fmt_latex_10(Q,'C',sig=4)}}}{{2\pi^2\left(8,8\times10^{{-12}}\right)\left({fmt_dec_pt(a,3)}\right)^2}}"
 )
 
-st.latex(rf"E_x(0) = {fmt_latex_10(Ex,'N/C',sig=4)}\quad {sentido_seta}")
+st.latex(rf"E_x = {fmt_latex_10(Ex,'N/C',sig=4)}\quad {sentido_seta}")
 
 st.divider()
 
