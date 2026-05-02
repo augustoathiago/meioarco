@@ -100,7 +100,7 @@ def fmt_dec_pt(val: float, nd: int = 3):
 # Configuração da página
 # =========================
 st.set_page_config(
-    page_title="Simulador Campo Elétrico no Centro do Meio Arco – Física II",
+    page_title="Simulador Campo Elétrico do Meio Arco – Física II",
     layout="wide"
 )
 
@@ -377,9 +377,6 @@ st.latex(r"Q = \lambda\,L = \lambda(\pi a)")
 st.markdown("**Campo elétrico no centro do meio arco**")
 st.latex(r"E_x(0) = \frac{Q}{2\pi^2\varepsilon_0 a^2}")
 
-st.markdown("**Forma equivalente em função de \(\lambda\)**")
-st.latex(r"E_x(0) = \frac{\lambda}{2\pi\varepsilon_0 a}")
-
 st.markdown("**Permissividade do vácuo**")
 st.latex(r"\varepsilon_0 = 8,8\times10^{-12}\ \text{C}^2/\text{N·m}^2")
 
@@ -396,10 +393,6 @@ st.latex(
     rf"Q = \lambda L = \left({fmt_latex_10(lmbda,'C/m',sig=3)}\right)\left({fmt_latex_10(L,'m',sig=4)}\right)"
     rf" = {fmt_latex_10(Q,'C',sig=4)}"
 )
-
-st.latex(r"\varepsilon_0 = 8,8\times10^{-12}\ \text{C}^2/\text{N·m}^2")
-
-st.latex(r"E_x(0) = \frac{Q}{2\pi^2\varepsilon_0 a^2}")
 
 st.latex(
     rf"E_x(0) = \frac{{{fmt_latex_10(Q,'C',sig=4)}}}{{2\pi^2\left(8,8\times10^{{-12}}\right)\left({fmt_dec_pt(a,3)}\right)^2}}"
