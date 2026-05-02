@@ -7,31 +7,59 @@ import plotly.graph_objects as go
 # =========================
 EPS0 = 8.8e-12  # C²/(N·m²)
 
-def arc_length(a: float) -> float:
+def arc_length(a: float):
     """Comprimento de um meio arco."""
     return np.pi * a
 
-def total_charge(lmbda: float, a: float) -> float:
+def total_charge(lmbda: float, a: float):
     """Carga total do meio arco."""
     return lmbda * arc_length(a)
 
-def field_center_formula(Q: float, a: float) -> float:
+def field_center_formula(Q, a):
     """
     Campo no centro (x=0) para o meio arco com boca virada para a direita.
-    Para Q > 0, Ex > 0.
+    Aceita escalares ou arrays.
+    
+    Fórmula:
+        Ex(0) = Q / (2*pi^2*eps0*a^2)
     """
-    if a == 0:
-        return 0.0
-    return Q / (2.0 * np.pi**2 * EPS0 * a*a)
+    Q_arr = np.asarray(Q, dtype=float)
+    a_arr = np.asarray(a, dtype=float)
 
-def field_center_formula_lambda(lmbda: float, a: float) -> float:
+    result = np.zeros(np.broadcast(Q_arr, a_arr).shape, dtype=float)
+    np.divide(
+        Q_arr,
+        2.0 * np.pi**2 * EPS0 * a_arr**2,
+        out=result,
+        where=(a_arr != 0)
+    )
+
+    if result.shape == ():
+        return float(result)
+    return result
+
+def field_center_formula_lambda(lmbda, a):
     """
-    Forma equivalente usando diretamente lambda:
-    Ex = lambda / (2*pi*eps0*a)
+    Forma equivalente usando diretamente lambda.
+    Aceita escalares ou arrays.
+    
+    Fórmula:
+        Ex(0) = lambda / (2*pi*eps0*a)
     """
-    if a == 0:
-        return 0.0
-    return lmbda / (2.0 * np.pi * EPS0 * a)
+    lmbda_arr = np.asarray(lmbda, dtype=float)
+    a_arr = np.asarray(a, dtype=float)
+
+    result = np.zeros(np.broadcast(lmbda_arr, a_arr).shape, dtype=float)
+    np.divide(
+        lmbda_arr,
+        2.0 * np.pi * EPS0 * a_arr,
+        out=result,
+        where=(a_arr != 0)
+    )
+
+    if result.shape == ():
+        return float(result)
+    return result
 
 
 # =========================
@@ -116,8 +144,8 @@ st.divider()
 # =========================
 st.subheader("Parâmetros")
 
-A_MIN, A_MAX = 0.05, 1.00     # m
-L_U_MIN, L_U_MAX = -20.0, 20.0  # µC/m
+A_MIN, A_MAX = 0.05, 1.00      # m
+L_U_MIN, L_U_MAX = -20.0, 20.0 # µC/m
 L_U_STEP = 0.1
 
 colp1, colp2 = st.columns(2)
@@ -152,7 +180,7 @@ Ex = field_center_formula(Q, a)
 # Checagem de consistência entre as duas formas analíticas
 Ex_check = field_center_formula_lambda(lmbda, a)
 if not np.isclose(Ex, Ex_check, rtol=1e-10, atol=1e-14):
-    Ex = Ex_check  # fallback seguro
+    Ex = Ex_check
 
 # Sentido do campo
 if Ex > 0:
@@ -260,7 +288,7 @@ def make_scene_figure(a, lmbda, Q, Ex):
     )
 
     # Caixa do campo
-    box_x = clamp(0.20*BASE, X_LEFT + 0.20*BASE, X_RIGHT - 0.55*BASE)
+    box_x = clamp(0.20 * BASE, X_LEFT + 0.20*BASE, X_RIGHT - 0.55*BASE)
     box_y = 0.38 * Y_LIM
 
     fig.add_annotation(
@@ -369,11 +397,9 @@ st.latex(
     rf" = {fmt_latex_10(Q,'C',sig=4)}"
 )
 
-st.latex(rf"\varepsilon_0 = 8,8\times10^{{-12}}\ \text{{C}}^2/\text{{N·m}}^2")
+st.latex(r"\varepsilon_0 = 8,8\times10^{-12}\ \text{C}^2/\text{N·m}^2")
 
-st.latex(
-    rf"E_x(0) = \frac{{Q}}{{2\pi^2\varepsilon_0 a^2}}"
-)
+st.latex(r"E_x(0) = \frac{Q}{2\pi^2\varepsilon_0 a^2}")
 
 st.latex(
     rf"E_x(0) = \frac{{{fmt_latex_10(Q,'C',sig=4)}}}{{2\pi^2\left(8,8\times10^{{-12}}\right)\left({fmt_dec_pt(a,3)}\right)^2}}"
