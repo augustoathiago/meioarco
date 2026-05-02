@@ -9,45 +9,88 @@ EPS0 = 8.8e-12  # C²/(N·m²)
 K = 1.0 / (4.0 * np.pi * EPS0)
 
 def arc_length(a: float) -> float:
-    # comprimento de um meio arco
+    """Comprimento de um meio arco."""
     return np.pi * a
 
 def total_charge(lmbda: float, a: float) -> float:
+    """Carga total do meio arco."""
     return lmbda * arc_length(a)
+
+def numerical_trapezoid(y, x, axis=-1):
+    """
+    Integração robusta por trapézios.
+    Usa np.trapezoid se existir; caso contrário, usa fallback manual.
+    """
+    if hasattr(np, "trapezoid"):
+        return np.trapezoid(y, x, axis=axis)
+
+    # fallback manual
+    y = np.asarray(y)
+    x = np.asarray(x)
+
+    dx = np.diff(x)
+    sl1 = [slice(None)] * y.ndim
+    sl2 = [slice(None)] * y.ndim
+    sl1[axis] = slice(1, None)
+    sl2[axis] = slice(None, -1)
+
+    y1 = y[tuple(sl1)]
+    y2 = y[tuple(sl2)]
+
+    shape_dx = [1] * y.ndim
+    shape_dx[axis] = dx.shape[0]
+    dx_reshaped = dx.reshape(shape_dx)
+
+    return np.sum((y1 + y2) * 0.5 * dx_reshaped, axis=axis)
 
 def field_on_axis_semicircle(x, a: float, lmbda: float, n_theta: int = 3000):
     """
-    Campo elétrico Ex gerado por um meio arco lateral (metade direita da circunferência),
-    de raio a e densidade linear uniforme lmbda, no ponto P=(x,0).
+    Campo elétrico Ex gerado por um meio arco com boca virada para a direita,
+    isto é, o arco está na metade esquerda do círculo.
 
-    Parametrização da carga:
-        r'(theta) = (a cos(theta), a sin(theta)), theta em [-pi/2, pi/2]
+    Parametrização:
+        r'(theta) = (-a cos(theta), a sin(theta)), theta em [-pi/2, pi/2]
 
-    Pela simetria, Ey = 0 e resta apenas Ex.
+    Ponto:
+        P = (x, 0), com x >= 0
+
+    Pela simetria:
+        Ey = 0
+        Ex é o campo resultante ao longo do eixo horizontal
+
+    Fórmula integral:
+        Ex = k * lambda * a * ∫ [ (x + a cos(theta)) /
+                                 (x² + a² + 2ax cos(theta))^(3/2) ] dtheta
+             com theta em [-pi/2, pi/2]
     """
     x_arr = np.asarray(x, dtype=float)
-    scalar_input = x_arr.ndim == 0
+    scalar_input = (x_arr.ndim == 0)
     if scalar_input:
         x_arr = x_arr[None]
 
     theta = np.linspace(-np.pi / 2, np.pi / 2, n_theta)
     c = np.cos(theta)
 
-    # R^2 = (x - a cos(theta))^2 + (a sin(theta))^2
-    #     = x^2 + a^2 - 2ax cos(theta)
-    R2 = x_arr[:, None]**2 + a*a - 2.0*a*x_arr[:, None]*c[None, :]
-    numer = x_arr[:, None] - a*c[None, :]
+    # Distância ao quadrado do elemento de carga até P
+    # x' = -a cos(theta), y' = a sin(theta)
+    # R² = (x - x')² + (0 - y')² = (x + a cos(theta))² + (a sin(theta))²
+    #    = x² + a² + 2ax cos(theta)
+    R2 = x_arr[:, None]**2 + a*a + 2.0*a*x_arr[:, None]*c[None, :]
+    numer = x_arr[:, None] + a*c[None, :]
 
     integrand = numer / np.power(R2, 1.5)
-    ex = K * lmbda * a * np.trapz(integrand, theta, axis=1)
+    ex = K * lmbda * a * numerical_trapezoid(integrand, theta, axis=1)
 
     return float(ex[0]) if scalar_input else ex
 
 def field_center_formula(Q: float, a: float) -> float:
-    # Caso particular em x = 0, equivalente à fórmula da imagem (adaptada para Ex)
+    """
+    Campo no centro (x=0) para o meio arco com boca virada para a direita.
+    Para Q > 0, Ex > 0.
+    """
     if a == 0:
         return 0.0
-    return -Q / (2.0 * np.pi**2 * EPS0 * a*a)
+    return Q / (2.0 * np.pi**2 * EPS0 * a*a)
 
 
 # =========================
@@ -121,7 +164,7 @@ with c2:
     st.markdown(
         """
         # Simulador Campo Elétrico do Meio Arco – Física II
-        **Estude o campo elétrico gerado por um meio arco carregado em um ponto P sobre o eixo horizontal de simetria.**
+        **Estude o campo elétrico gerado por um meio arco carregado em um ponto P sobre o eixo horizontal.**
         """
     )
 
@@ -132,36 +175,41 @@ st.divider()
 # =========================
 st.subheader("Parâmetros")
 
-A_MIN, A_MAX = 0.05, 1.00   # m
-L_U_MIN, L_U_MAX = -20.0, 20.0  # µC/m
-L_U_STEP = 0.1
-X_STEP = 0.01
+X_MIN, X_MAX = 0.00, 2.00     # m
+A_MIN, A_MAX = 0.05, 1.00     # m
 
-# Para não permitir que P entre no arco:
-# no meio arco lateral, P não pode atingir x = a
-# então usamos x <= a - 0,01 (quando possível)
+# λ em µC/m
+L_U_MIN, L_U_MAX = -20.0, 20.0
+L_U_STEP = 0.1
+
 colp1, colp2, colp3 = st.columns(3)
 
-with colp3:
-    a = st.slider("Raio a (m)", min_value=float(A_MIN), max_value=float(A_MAX),
-                  value=0.25, step=0.01)
-
-with colp2:
-    lmbda_u = st.slider("Densidade linear λ (µC/m)", min_value=float(L_U_MIN), max_value=float(L_U_MAX),
-                        value=2.0, step=float(L_U_STEP))
-    lmbda = lmbda_u * 1e-6  # C/m
-
-# x máximo dinâmico para impedir P de entrar no arco
-x_max_allowed = max(0.0, np.floor((a - X_STEP) * 100) / 100)
-
 with colp1:
-    x_default = min(0.10, x_max_allowed)
     x = st.slider(
         "Distância x (m)",
-        min_value=0.0,
-        max_value=float(x_max_allowed),
-        value=float(x_default),
-        step=float(X_STEP)
+        min_value=float(X_MIN),
+        max_value=float(X_MAX),
+        value=0.40,
+        step=0.01
+    )
+
+with colp2:
+    lmbda_u = st.slider(
+        "Densidade linear λ (µC/m)",
+        min_value=float(L_U_MIN),
+        max_value=float(L_U_MAX),
+        value=2.0,
+        step=float(L_U_STEP)
+    )
+    lmbda = lmbda_u * 1e-6  # C/m
+
+with colp3:
+    a = st.slider(
+        "Raio a (m)",
+        min_value=float(A_MIN),
+        max_value=float(A_MAX),
+        value=0.25,
+        step=0.01
     )
 
 # Cálculos
@@ -169,7 +217,7 @@ L = arc_length(a)
 Q = total_charge(lmbda, a)
 Ex = field_on_axis_semicircle(x, a, lmbda)
 
-# Sentido
+# Sentido do campo
 if Ex > 0:
     sentido_seta = "→"
     sentido_texto = "para a direita"
@@ -183,20 +231,20 @@ else:
 st.divider()
 
 # =========================
-# Emax global (para escala do vetor na imagem)
+# Emax global (escala do vetor na imagem)
 # =========================
 @st.cache_data(show_spinner=False)
 def compute_global_emax_for_scene():
-    aas = np.linspace(A_MIN, A_MAX, 50)
+    xs = np.linspace(X_MIN, X_MAX, 180)
+    aas = np.linspace(A_MIN, A_MAX, 90)
     lam_abs = max(abs(L_U_MIN), abs(L_U_MAX)) * 1e-6
+
     emax = 1.0
     for aa in aas:
-        xmax = max(0.0, aa - 0.01)
-        if xmax <= 0:
-            continue
-        xs = np.linspace(0.0, xmax, 80)
         E = field_on_axis_semicircle(xs, aa, lam_abs, n_theta=1200)
-        emax = max(emax, float(np.max(np.abs(E))))
+        local_max = float(np.max(np.abs(E)))
+        if local_max > emax:
+            emax = local_max
     return 1.15 * emax
 
 E_MAX_SCENE = compute_global_emax_for_scene()
@@ -207,14 +255,15 @@ E_MAX_SCENE = compute_global_emax_for_scene()
 st.subheader("Imagem")
 st.caption("📱 No celular: arraste a figura para os lados (pan) para ver tudo sem perder detalhes.")
 
-BASE = max(A_MAX, 1.20)
-X_LEFT, X_RIGHT = -0.90 * BASE, 1.80 * BASE
+BASE = max(A_MAX, X_MAX)
+X_LEFT, X_RIGHT = -1.30 * BASE, 2.10 * BASE
 Y_LIM = 1.25 * A_MAX
 
 def clamp(v, vmin, vmax):
     return max(vmin, min(vmax, v))
 
 def make_scene_figure(x, a, lmbda, Q, Ex):
+    # cor do arco
     if Q > 0:
         arc_color = "red"
     elif Q < 0:
@@ -224,7 +273,7 @@ def make_scene_figure(x, a, lmbda, Q, Ex):
 
     fig = go.Figure()
 
-    # eixo x tracejado
+    # eixo horizontal tracejado
     fig.add_trace(go.Scatter(
         x=[X_LEFT, X_RIGHT], y=[0, 0],
         mode="lines",
@@ -233,9 +282,9 @@ def make_scene_figure(x, a, lmbda, Q, Ex):
         showlegend=False
     ))
 
-    # meio arco lateral (direita)
+    # meio arco com boca virada para a direita (arco na metade esquerda)
     t = np.linspace(-np.pi/2, np.pi/2, 500)
-    arc_x = a * np.cos(t)
+    arc_x = -a * np.cos(t)
     arc_y = a * np.sin(t)
 
     fig.add_trace(go.Scatter(
@@ -266,7 +315,9 @@ def make_scene_figure(x, a, lmbda, Q, Ex):
         showlegend=False
     ))
 
+    # =========================
     # Vetor E
+    # =========================
     max_arrow_len = 0.28 * (X_RIGHT - X_LEFT)
     min_arrow_len = 0.08 * (X_RIGHT - X_LEFT)
     frac = 0.0 if E_MAX_SCENE == 0 else min(1.0, abs(Ex) / E_MAX_SCENE)
@@ -289,8 +340,8 @@ def make_scene_figure(x, a, lmbda, Q, Ex):
     )
 
     # Caixa do campo
-    box_x = clamp(x + 0.15*BASE, X_LEFT + 0.15*BASE, X_RIGHT - 0.60*BASE)
-    box_y = 0.40 * Y_LIM
+    box_x = clamp(x + 0.18*BASE, X_LEFT + 0.20*BASE, X_RIGHT - 0.55*BASE)
+    box_y = 0.38 * Y_LIM
 
     fig.add_annotation(
         x=box_x, y=box_y,
@@ -305,7 +356,9 @@ def make_scene_figure(x, a, lmbda, Q, Ex):
         font=dict(size=13, color="green")
     )
 
+    # =========================
     # Cota x
+    # =========================
     y_dimx = -0.35 * Y_LIM
     fig.add_trace(go.Scatter(
         x=[0, 0], y=[0, y_dimx],
@@ -338,8 +391,10 @@ def make_scene_figure(x, a, lmbda, Q, Ex):
         font=dict(color="black", size=12)
     )
 
-    # Cota a (raio desenhado até 45°)
-    ang = np.pi / 4
+    # =========================
+    # Cota a
+    # =========================
+    ang = 3*np.pi/4  # raio apontando para o meio do arco à esquerda
     xr = a * np.cos(ang)
     yr = a * np.sin(ang)
 
@@ -355,13 +410,15 @@ def make_scene_figure(x, a, lmbda, Q, Ex):
         arrowcolor="black"
     )
     fig.add_annotation(
-        x=0.60 * xr, y=0.60 * yr + 0.05*Y_LIM,
+        x=0.62 * xr - 0.02*BASE, y=0.62 * yr + 0.05*Y_LIM,
         text=f"a = {fmt_dec_pt(a, 3)} m",
         showarrow=False,
         font=dict(color="black", size=12)
     )
 
+    # =========================
     # Caixa fixa com λ
+    # =========================
     fig.add_annotation(
         x=0.02, y=0.98, xref="paper", yref="paper",
         text=f"λ = {fmt_html_10(lmbda, 'C/m', sig=3)}",
@@ -373,6 +430,7 @@ def make_scene_figure(x, a, lmbda, Q, Ex):
         font=dict(size=12, color="black")
     )
 
+    # Layout
     fig.update_layout(
         height=460,
         margin=dict(l=10, r=10, t=10, b=10),
@@ -406,14 +464,14 @@ st.latex(r"L = \pi a")
 st.markdown("**Carga total**")
 st.latex(r"Q = \lambda\,L = \lambda(\pi a)")
 
-st.markdown("**Campo elétrico no eixo horizontal de simetria**")
+st.markdown("**Campo elétrico no eixo horizontal**")
 st.latex(
     r"E_x = \frac{1}{4\pi\varepsilon_0}\int_{-\pi/2}^{\pi/2}"
-    r"\frac{\lambda a\,(x-a\cos\theta)}{\left(a^2+x^2-2ax\cos\theta\right)^{3/2}}\,d\theta"
+    r"\frac{\lambda a\,(x+a\cos\theta)}{\left(a^2+x^2+2ax\cos\theta\right)^{3/2}}\,d\theta"
 )
 
 st.markdown("**No centro do meio arco \((x=0)\)**")
-st.latex(r"E_x(0) = -\frac{Q}{2\pi^2\varepsilon_0 a^2}")
+st.latex(r"E_x(0) = \frac{Q}{2\pi^2\varepsilon_0 a^2}")
 
 st.markdown("**Permissividade do vácuo**")
 st.latex(r"\varepsilon_0 = 8,8\times10^{-12}\ \text{C}^2/\text{N·m}^2")
@@ -441,7 +499,7 @@ if abs(x) < 1e-12:
     Ex_center = field_center_formula(Q, a)
     st.markdown("**Como \(x=0\), também vale a expressão fechada do centro:**")
     st.latex(
-        rf"E_x(0) = -\frac{{Q}}{{2\pi^2\varepsilon_0 a^2}}"
+        rf"E_x(0) = \frac{{Q}}{{2\pi^2\varepsilon_0 a^2}}"
         rf" = {fmt_latex_10(Ex_center,'N/C',sig=4)}\quad {sentido_seta}"
     )
 
@@ -453,26 +511,20 @@ st.divider()
 st.subheader("Gráficos")
 
 def curve_E_vs_x(a, lmbda):
-    xmax = max(0.0, a - 0.01)
-    if xmax == 0:
-        xs = np.array([0.0])
-    else:
-        xs = np.linspace(0.0, xmax, 250)
+    xs = np.linspace(X_MIN, X_MAX, 280)
     E = field_on_axis_semicircle(xs, a, lmbda, n_theta=1400)
     return xs, E
 
 def curve_E_vs_a(x, lmbda):
-    aas = np.linspace(max(A_MIN, x + 0.01), A_MAX, 220)
+    aas = np.linspace(A_MIN, A_MAX, 240)
     E = np.array([field_on_axis_semicircle(x, aa, lmbda, n_theta=1400) for aa in aas])
     return aas, E
 
 def curve_E_vs_Q(x, a):
-    lam_min = L_U_MIN * 1e-6
-    lam_max = L_U_MAX * 1e-6
-    Qmin = lam_min * np.pi * a
-    Qmax = lam_max * np.pi * a
-    Qs = np.linspace(Qmin, Qmax, 220)
-    # como Q = λπa => λ = Q/(πa)
+    # Para a e x fixos, Q varia linearmente com λ: Q = λ π a
+    Qmin = (L_U_MIN * 1e-6) * np.pi * a
+    Qmax = (L_U_MAX * 1e-6) * np.pi * a
+    Qs = np.linspace(Qmin, Qmax, 240)
     lambdas = Qs / (np.pi * a)
     E = np.array([field_on_axis_semicircle(x, a, lam, n_theta=1400) for lam in lambdas])
     return Qs, E, Qmin, Qmax
@@ -502,6 +554,11 @@ xs, Es = curve_E_vs_x(a, lmbda)
 aas, Ea = curve_E_vs_a(x, lmbda)
 Qs, EQ, Q_MIN_AXIS, Q_MAX_AXIS = curve_E_vs_Q(x, a)
 
+max_abs = float(np.max(np.abs(np.concatenate([Es, Ea, EQ]))))
+if max_abs == 0:
+    max_abs = 1.0
+YMAX = 1.08 * max_abs
+
 PLOT_CFG_STATIC = {
     "staticPlot": True,
     "displayModeBar": False,
@@ -524,8 +581,8 @@ with gx1:
         paper_bgcolor="white",
         showlegend=False
     )
-    fig1.update_xaxes(title="x (m)", range=[0, max(xs) if len(xs) else 0.1], zeroline=True)
-    fig1.update_yaxes(title="Eₓ (N/C)", zeroline=True)
+    fig1.update_xaxes(title="x (m)", range=[X_MIN, X_MAX], zeroline=True)
+    fig1.update_yaxes(title="Eₓ (N/C)", range=[-YMAX, YMAX], zeroline=True)
     style_axes_black(fig1)
     st.plotly_chart(fig1, use_container_width=True, config=PLOT_CFG_STATIC)
 
@@ -542,8 +599,8 @@ with gx2:
         paper_bgcolor="white",
         showlegend=False
     )
-    fig2.update_xaxes(title="a (m)", range=[max(A_MIN, x + 0.01), A_MAX], zeroline=True)
-    fig2.update_yaxes(title="Eₓ (N/C)", zeroline=True)
+    fig2.update_xaxes(title="a (m)", range=[A_MIN, A_MAX], zeroline=True)
+    fig2.update_yaxes(title="Eₓ (N/C)", range=[-YMAX, YMAX], zeroline=True)
     style_axes_black(fig2)
     st.plotly_chart(fig2, use_container_width=True, config=PLOT_CFG_STATIC)
 
@@ -561,7 +618,7 @@ with gx3:
         showlegend=False
     )
     fig3.update_xaxes(title="Q (C)", range=[Q_MIN_AXIS, Q_MAX_AXIS], zeroline=True)
-    fig3.update_yaxes(title="Eₓ (N/C)", zeroline=True)
+    fig3.update_yaxes(title="Eₓ (N/C)", range=[-YMAX, YMAX], zeroline=True)
     style_axes_black(fig3)
     st.plotly_chart(fig3, use_container_width=True, config=PLOT_CFG_STATIC)
 
