@@ -651,5 +651,3 @@ else:
     st.latex(
         rf"\alpha_E = {fmt_dec_pt(angE,2)}^\circ"
     )
-    
-st.divider()
