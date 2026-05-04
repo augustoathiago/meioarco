@@ -596,7 +596,7 @@ st.latex(
     rf"Q = \lambda L = \left({fmt_latex_10(lmbda,'C/m',sig=3)}\right)\left({fmt_latex_10(L,'m',sig=4)}\right)"
     rf" = {fmt_latex_10(Q,'C',sig=4)}"
 )
-
+st.markdown("**Componente Ex**")
 # Ex
 st.latex(
     r"E_x = \frac{\lambda}{4\pi\varepsilon_0 a}\int_0^{\theta}\sin(\theta')\,d\theta'"
@@ -615,8 +615,7 @@ st.latex(
 st.latex(
     rf"E_x = {fmt_latex_10(Ex,'N/C',sig=4)}\quad {sx_arrow}"
 )
-st.markdown(f"**Sentido de \(E_x\):** {sx_text}")
-
+st.markdown("**Componente Ey**")
 # Ey
 st.latex(
     r"E_y = -\,\frac{\lambda}{4\pi\varepsilon_0 a}\int_0^{\theta}\cos(\theta')\,d\theta'"
@@ -635,8 +634,7 @@ st.latex(
 st.latex(
     rf"E_y = {fmt_latex_10(Ey,'N/C',sig=4)}\quad {sy_arrow}"
 )
-st.markdown(f"**Sentido de \(E_y\):** {sy_text}")
-
+st.markdown("**Módulo do campo elétrico**")
 # Módulo
 st.latex(r"|E| = \sqrt{E_x^2 + E_y^2}")
 st.latex(
@@ -645,7 +643,7 @@ st.latex(
 st.latex(
     rf"|E| = {fmt_latex_10(Emod,'N/C',sig=4)}"
 )
-
+st.markdown("**Ângulo do campo elétrico**")
 # Ângulo do vetor
 if angE is None:
     st.markdown("**Ângulo do campo elétrico:** campo nulo (ângulo indefinido).")
@@ -653,152 +651,5 @@ else:
     st.latex(
         rf"\alpha_E = \operatorname{{atan2}}(E_y,E_x) = {fmt_dec_pt(angE,2)}^\circ"
     )
-    st.markdown(f"**Direção do vetor \(\vec E\):** {sentido_resultante}")
-
+    
 st.divider()
-
-# =========================
-# Gráficos
-# =========================
-st.subheader("Gráficos")
-
-def curve_Emod_vs_a(lmbda, theta_deg):
-    aas = np.linspace(A_MIN, A_MAX, 450)
-    Ex_arr, Ey_arr = field_components_lambda(lmbda, aas, theta_deg)
-    E_arr = field_magnitude(Ex_arr, Ey_arr)
-    return aas, E_arr
-
-def curve_Emod_vs_Q(a, theta_deg):
-    theta_rad_local = np.deg2rad(theta_deg)
-    L_local = arc_length(a, theta_rad_local)
-
-    if np.isclose(L_local, 0.0, atol=1e-15):
-        Qs = np.array([-1e-12, 0.0, 1e-12])
-        Es = np.array([0.0, 0.0, 0.0])
-        return Qs, Es, -1e-12, 1e-12
-
-    Qmin = (L_U_MIN * 1e-6) * L_local
-    Qmax = (L_U_MAX * 1e-6) * L_local
-
-    if np.isclose(Qmin, Qmax, atol=1e-20):
-        Qmin -= 1e-12
-        Qmax += 1e-12
-
-    Qs = np.linspace(Qmin, Qmax, 450)
-    lambdas = Qs / L_local
-    Ex_arr, Ey_arr = field_components_lambda(lambdas, a, theta_deg)
-    E_arr = field_magnitude(Ex_arr, Ey_arr)
-    return Qs, E_arr, Qmin, Qmax
-
-def style_axes_black(fig):
-    fig.update_xaxes(
-        title_font=dict(color="black"),
-        tickfont=dict(color="black"),
-        showline=True, linecolor="black",
-        ticks="outside", tickcolor="black",
-        exponentformat="power",
-        automargin=True,
-        fixedrange=True
-    )
-    fig.update_yaxes(
-        title_font=dict(color="black"),
-        tickfont=dict(color="black"),
-        showline=True, linecolor="black",
-        ticks="outside", tickcolor="black",
-        exponentformat="power",
-        automargin=True,
-        fixedrange=True
-    )
-    return fig
-
-aas, Ea = curve_Emod_vs_a(lmbda, theta_deg)
-Qs, EQ, Q_MIN_AXIS, Q_MAX_AXIS = curve_Emod_vs_Q(a, theta_deg)
-
-max_val = float(np.max(np.concatenate([
-    np.asarray(Ea, dtype=float),
-    np.asarray(EQ, dtype=float),
-    np.array([Emod], dtype=float)
-])))
-if max_val == 0:
-    max_val = 1.0
-YMAX = 1.08 * max_val
-
-PLOT_CFG_STATIC = {
-    "staticPlot": True,
-    "displayModeBar": False,
-    "scrollZoom": False,
-    "responsive": True
-}
-
-gx1, gx2 = st.columns(2)
-
-with gx1:
-    fig1 = go.Figure()
-    fig1.add_trace(go.Scatter(
-        x=aas, y=Ea,
-        mode="lines",
-        line=dict(color="#2ca02c", width=3)
-    ))
-    fig1.add_trace(go.Scatter(
-        x=[a], y=[Emod],
-        mode="markers",
-        marker=dict(color="red", size=10)
-    ))
-    fig1.update_layout(
-        title="Módulo do campo elétrico em função do raio a",
-        title_font=dict(color="black"),
-        height=430,
-        margin=dict(l=60, r=18, t=65, b=95),
-        plot_bgcolor="white",
-        paper_bgcolor="white",
-        showlegend=False
-    )
-    fig1.update_xaxes(title="a (m)", range=[A_MIN, A_MAX], zeroline=True)
-    fig1.update_yaxes(title="|E| (N/C)", range=[0, YMAX], zeroline=True)
-    style_axes_black(fig1)
-    st.plotly_chart(fig1, use_container_width=True, config=PLOT_CFG_STATIC)
-
-with gx2:
-    fig2 = go.Figure()
-    fig2.add_trace(go.Scatter(
-        x=Qs, y=EQ,
-        mode="lines",
-        line=dict(color="#9467bd", width=3)
-    ))
-    fig2.add_trace(go.Scatter(
-        x=[Q], y=[Emod],
-        mode="markers",
-        marker=dict(color="red", size=10)
-    ))
-    fig2.update_layout(
-        title="Módulo do campo elétrico em função da carga total Q",
-        title_font=dict(color="black"),
-        height=430,
-        margin=dict(l=60, r=18, t=65, b=95),
-        plot_bgcolor="white",
-        paper_bgcolor="white",
-        showlegend=False
-    )
-    fig2.update_xaxes(title="Q (C)", range=[Q_MIN_AXIS, Q_MAX_AXIS], zeroline=True)
-    fig2.update_yaxes(title="|E| (N/C)", range=[0, YMAX], zeroline=True)
-    style_axes_black(fig2)
-    st.plotly_chart(fig2, use_container_width=True, config=PLOT_CFG_STATIC)
-
-st.caption("🔴 O ponto vermelho indica a situação atual.")
-
-# =========================
-# Observação final
-# =========================
-with st.expander("Convenção angular usada no app"):
-    st.markdown(
-        """
-        Neste simulador, o arco é definido por um único ângulo \\(\\theta\\):
-        - **0°**: topo do círculo
-        - o arco cresce no **sentido anti-horário**
-        - o campo elétrico \\(\\vec E\\) é mostrado com:
-          - componente **x**: \\(E_x\\)
-          - componente **y\\)**: \\(E_y\\)
-          - módulo: \\(|E|\\)
-          - ângulo do vetor em relação ao eixo **+x**
-        """
-    )
