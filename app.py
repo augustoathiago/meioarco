@@ -489,23 +489,28 @@ def make_scene_figure(a, lmbda, Q, theta_deg, Ex, Ey, Emod):
         font=dict(size=12, color="black")
     )
 
-    # Caixa do campo
-    fig.add_annotation(
-        x=0.98, y=0.98, xref="paper", yref="paper",
-        text=(
-            f"<b>E<sub>x</sub></b> = {fmt_html_10(Ex, 'N/C', sig=3)}<br>"
-            f"<b>E<sub>y</sub></b> = {fmt_html_10(Ey, 'N/C', sig=3)}<br>"
-            f"<b>|E|</b> = {fmt_html_10(Emod, 'N/C', sig=3)}"
-        ),
-        showarrow=False,
-        xanchor="right",
-        yanchor="top",
-        align="left",
-        bgcolor="rgba(255,255,255,0.94)",
-        bordercolor="rgba(0,0,0,0.55)",
-        borderwidth=1,
-        font=dict(size=12, color="black")
-    )
+
+# Caixa do campo (com cores individuais)
+fig.add_annotation(
+    x=0.98, y=0.98, xref="paper", yref="paper",
+    text=(
+        f"<span style='color:#ff7f0e;'><b>E<sub>x</sub></b> = "
+        f"{fmt_html_10(Ex, 'N/C', sig=3)}</span><br>"
+        f"<span style='color:#9467bd;'><b>E<sub>y</sub></b> = "
+        f"{fmt_html_10(Ey, 'N/C', sig=3)}</span><br>"
+        f"<span style='color:green;'><b>|E|</b> = "
+        f"{fmt_html_10(Emod, 'N/C', sig=3)}</span>"
+    ),
+    showarrow=False,
+    xanchor="right",
+    yanchor="top",
+    align="left",
+    bgcolor="rgba(255,255,255,0.94)",
+    bordercolor="rgba(0,0,0,0.55)",
+    borderwidth=1,
+    font=dict(size=12)  # cor aqui vira apenas "fallback"
+)
+
 
     # Títulos dos eixos
     fig.add_annotation(
