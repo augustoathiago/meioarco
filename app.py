@@ -464,30 +464,6 @@ def make_scene_figure(a, lmbda, Q, theta_deg, Ex, Ey, Emod):
             arrowcolor="green"
         )
 
-        # rótulos
-        fig.add_annotation(
-            x=dx/2 if abs(dx) > 1e-12 else 0.12*BASE, y=0.08*BASE,
-            text="<b>E<sub>x</sub></b>",
-            showarrow=False,
-            font=dict(size=13, color="#ff7f0e"),
-            bgcolor="rgba(255,255,255,0.85)"
-        )
-        fig.add_annotation(
-            x=dx + 0.09*BASE*np.sign(dx if abs(dx) > 1e-12 else 1),
-            y=dy/2 if abs(dy) > 1e-12 else -0.12*BASE,
-            text="<b>E<sub>y</sub></b>",
-            showarrow=False,
-            font=dict(size=13, color="#9467bd"),
-            bgcolor="rgba(255,255,255,0.85)"
-        )
-        fig.add_annotation(
-            x=0.60*dx, y=0.60*dy + 0.06*BASE,
-            text="<b>E</b>",
-            showarrow=False,
-            font=dict(size=13, color="green"),
-            bgcolor="rgba(255,255,255,0.85)"
-        )
-
     # Cota vertical do raio à esquerda
     xdim = -a - 0.18 * BASE
     add_vertical_dimension(
