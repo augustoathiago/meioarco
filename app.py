@@ -7,60 +7,82 @@ import plotly.graph_objects as go
 # =========================
 EPS0 = 8.8e-12  # C²/(N·m²)
 
-def arc_length(a: float):
-    """Comprimento de um meio arco."""
-    return np.pi * a
+def clean_small(val, tol=1e-15):
+    """Zera valores numéricos muito pequenos para evitar -0,000 e ruídos."""
+    arr = np.asarray(val, dtype=float)
+    arr = np.where(np.abs(arr) < tol, 0.0, arr)
+    if arr.shape == ():
+        return float(arr)
+    return arr
 
-def total_charge(lmbda: float, a: float):
-    """Carga total do meio arco."""
-    return lmbda * arc_length(a)
+def arc_length(a: float, theta_rad: float):
+    """Comprimento do arco: L = a*theta (theta em rad)."""
+    return a * theta_rad
 
-def field_center_formula(Q, a):
+def total_charge(lmbda: float, a: float, theta_rad: float):
+    """Carga total do arco: Q = lambda * L."""
+    return lmbda * arc_length(a, theta_rad)
+
+def field_components_lambda(lmbda, a, theta_rad):
     """
-    Campo no centro (x=0) para o meio arco com boca virada para a direita.
-    Aceita escalares ou arrays.
-    
-    Fórmula:
-        Ex(0) = Q / (2*pi^2*eps0*a^2)
-    """
-    Q_arr = np.asarray(Q, dtype=float)
-    a_arr = np.asarray(a, dtype=float)
+    Campo elétrico no centro para um arco que:
+    - começa no topo do círculo (ângulo 0°)
+    - cresce no sentido anti-horário até theta
 
-    result = np.zeros(np.broadcast(Q_arr, a_arr).shape, dtype=float)
-    np.divide(
-        Q_arr,
-        2.0 * np.pi**2 * EPS0 * a_arr**2,
-        out=result,
-        where=(a_arr != 0)
-    )
+    Parametrização angular:
+        x = -a sin(beta)
+        y =  a cos(beta)
+        beta = 0 no topo, crescendo anti-horário
 
-    if result.shape == ():
-        return float(result)
-    return result
+    dq = lambda * a * d beta
 
-def field_center_formula_lambda(lmbda, a):
-    """
-    Forma equivalente usando diretamente lambda.
-    Aceita escalares ou arrays.
-    
-    Fórmula:
-        Ex(0) = lambda / (2*pi*eps0*a)
+    dE = (1 / (4*pi*eps0)) * (dq / a^2) * direção para o centro
+
+    Resultados:
+        Ex = (lambda / (4*pi*eps0*a)) * (1 - cos(theta))
+        Ey = -(lambda / (4*pi*eps0*a)) * sin(theta)
     """
     lmbda_arr = np.asarray(lmbda, dtype=float)
     a_arr = np.asarray(a, dtype=float)
+    theta_arr = np.asarray(theta_rad, dtype=float)
 
-    result = np.zeros(np.broadcast(lmbda_arr, a_arr).shape, dtype=float)
+    shape = np.broadcast(lmbda_arr, a_arr, theta_arr).shape
+    pref = np.zeros(shape, dtype=float)
+
     np.divide(
         lmbda_arr,
-        2.0 * np.pi * EPS0 * a_arr,
-        out=result,
+        4.0 * np.pi * EPS0 * a_arr,
+        out=pref,
         where=(a_arr != 0)
     )
 
-    if result.shape == ():
-        return float(result)
-    return result
+    Ex = pref * (1.0 - np.cos(theta_arr))
+    Ey = -pref * np.sin(theta_arr)
 
+    Ex = clean_small(Ex)
+    Ey = clean_small(Ey)
+
+    if np.asarray(Ex).shape == ():
+        return float(Ex), float(Ey)
+    return Ex, Ey
+
+def field_magnitude(Ex, Ey):
+    Emod = np.sqrt(np.asarray(Ex, dtype=float)**2 + np.asarray(Ey, dtype=float)**2)
+    Emod = clean_small(Emod)
+    if np.asarray(Emod).shape == ():
+        return float(Emod)
+    return Emod
+
+def field_angle_deg(Ex: float, Ey: float):
+    """
+    Ângulo do vetor E em relação ao eixo +x,
+    medido no sentido anti-horário, de 0° a 360°.
+    """
+    if np.isclose(Ex, 0.0, atol=1e-15) and np.isclose(Ey, 0.0, atol=1e-15):
+        return None
+    ang = np.degrees(np.arctan2(Ey, Ex))
+    ang = (ang + 360.0) % 360.0
+    return float(ang)
 
 # =========================
 # Formatação: 10^n (sem e±)
@@ -95,24 +117,37 @@ def fmt_html_10(val: float, unit: str = "", sig: int = 3):
 def fmt_dec_pt(val: float, nd: int = 3):
     return f"{val:.{nd}f}".replace(".", ",")
 
+def sentido_x(Ex: float):
+    if Ex > 0:
+        return "para a direita", "→"
+    if Ex < 0:
+        return "para a esquerda", "←"
+    return "nulo", "•"
+
+def sentido_y(Ey: float):
+    if Ey > 0:
+        return "para cima", "↑"
+    if Ey < 0:
+        return "para baixo", "↓"
+    return "nulo", "•"
 
 # =========================
 # Configuração da página
 # =========================
 st.set_page_config(
-    page_title="Simulador Campo Elétrico do Meio Arco – Física II",
+    page_title="Simulador Campo Elétrico de um Arco de Circunferência – Física II",
     layout="wide"
 )
 
-# CSS responsivo: gráficos mais altos no celular
+# CSS responsivo
 st.markdown(
     """
     <style>
     @media (max-width: 768px){
       div[data-testid="stPlotlyChart"] iframe,
       div[data-testid="stPlotlyChart"] > div {
-        height: 440px !important;
-        min-height: 440px !important;
+        height: 480px !important;
+        min-height: 480px !important;
       }
     }
     </style>
@@ -132,8 +167,8 @@ with c1:
 with c2:
     st.markdown(
         """
-        # Simulador Campo Elétrico no Centro do Meio Arco – Física II
-        **Estude o campo elétrico gerado por um meio arco carregado no ponto central P.**
+        # Simulador Campo Elétrico no Centro de um Arco de Circunferência – Física II
+        **Estude o campo elétrico gerado por um arco carregado no ponto central P.**
         """
     )
 
@@ -147,8 +182,9 @@ st.subheader("Parâmetros")
 A_MIN, A_MAX = 0.05, 1.00      # m
 L_U_MIN, L_U_MAX = -20.0, 20.0 # µC/m
 L_U_STEP = 0.1
+THETA_MIN, THETA_MAX = 0, 360  # graus
 
-colp1, colp2 = st.columns(2)
+colp1, colp2, colp3 = st.columns(3)
 
 with colp1:
     lmbda_u = st.slider(
@@ -169,41 +205,47 @@ with colp2:
         step=0.01
     )
 
-# ponto fixo no centro
-x = 0.0
+with colp3:
+    theta_deg = st.slider(
+        "Ângulo do arco θ (graus)",
+        min_value=int(THETA_MIN),
+        max_value=int(THETA_MAX),
+        value=180,
+        step=1
+    )
 
-# Cálculos
-L = arc_length(a)
-Q = total_charge(lmbda, a)
-Ex = field_center_formula(Q, a)
+theta_rad = np.deg2rad(theta_deg)
 
-# Checagem de consistência entre as duas formas analíticas
-Ex_check = field_center_formula_lambda(lmbda, a)
-if not np.isclose(Ex, Ex_check, rtol=1e-10, atol=1e-14):
-    Ex = Ex_check
+# =========================
+# Cálculos principais
+# =========================
+L = arc_length(a, theta_rad)
+Q = total_charge(lmbda, a, theta_rad)
 
-# Sentido do campo
-if Ex > 0:
-    sentido_seta = "→"
-    sentido_texto = "para a direita"
-elif Ex < 0:
-    sentido_seta = "←"
-    sentido_texto = "para a esquerda"
+Ex, Ey = field_components_lambda(lmbda, a, theta_rad)
+Emod = field_magnitude(Ex, Ey)
+angE = field_angle_deg(Ex, Ey)
+
+sx_text, sx_arrow = sentido_x(Ex)
+sy_text, sy_arrow = sentido_y(Ey)
+
+# Sentido do vetor resultante
+if Emod == 0:
+    sentido_resultante = "nulo"
 else:
-    sentido_seta = "•"
-    sentido_texto = "nulo"
+    sentido_resultante = f"ângulo de {fmt_dec_pt(angE, 2)}° em relação ao eixo +x"
 
 st.divider()
 
 # =========================
-# Emax global (escala do vetor na imagem)
+# Escala global do vetor na imagem
 # =========================
 @st.cache_data(show_spinner=False)
 def compute_global_emax_for_scene():
-    aas = np.linspace(A_MIN, A_MAX, 400)
     lam_abs = max(abs(L_U_MIN), abs(L_U_MAX)) * 1e-6
-    E = field_center_formula_lambda(lam_abs, aas)
-    return float(1.15 * np.max(np.abs(E)))
+    # O máximo do módulo ocorre em theta = 180° e a = A_MIN
+    # |E|max = |lambda| / (2*pi*eps0*a)
+    return float(1.15 * lam_abs / (2.0 * np.pi * EPS0 * A_MIN))
 
 E_MAX_SCENE = compute_global_emax_for_scene()
 
@@ -214,14 +256,14 @@ st.subheader("Imagem")
 st.caption("📱 No celular: arraste a figura para os lados (pan) para ver tudo sem perder detalhes.")
 
 BASE = max(A_MAX, 1.8)
-X_LEFT, X_RIGHT = -1.35 * BASE, 1.80 * BASE
-Y_LIM = 1.25 * A_MAX
+X_LEFT, X_RIGHT = -1.55 * BASE, 1.95 * BASE
+Y_BOTTOM, Y_TOP = -1.45 * BASE, 1.45 * BASE
 
 def clamp(v, vmin, vmax):
     return max(vmin, min(vmax, v))
 
-def make_scene_figure(a, lmbda, Q, Ex):
-    # cor do arco
+def make_scene_figure(a, lmbda, Q, theta_deg, theta_rad, Ex, Ey, Emod):
+    # Cor do arco conforme sinal da carga total
     if Q > 0:
         arc_color = "red"
     elif Q < 0:
@@ -231,7 +273,7 @@ def make_scene_figure(a, lmbda, Q, Ex):
 
     fig = go.Figure()
 
-    # eixo horizontal tracejado
+    # Eixos
     fig.add_trace(go.Scatter(
         x=[X_LEFT, X_RIGHT], y=[0, 0],
         mode="lines",
@@ -239,21 +281,74 @@ def make_scene_figure(a, lmbda, Q, Ex):
         hoverinfo="skip",
         showlegend=False
     ))
-
-    # meio arco com boca virada para a direita (arco na metade esquerda)
-    t = np.linspace(-np.pi/2, np.pi/2, 500)
-    arc_x = -a * np.cos(t)
-    arc_y = a * np.sin(t)
-
     fig.add_trace(go.Scatter(
-        x=arc_x, y=arc_y,
+        x=[0, 0], y=[Y_BOTTOM, Y_TOP],
         mode="lines",
-        line=dict(color=arc_color, width=5),
+        line=dict(color="gray", dash="dash", width=2),
         hoverinfo="skip",
         showlegend=False
     ))
 
-    # ponto P no centro
+    # Círculo de referência (leve)
+    tt = np.linspace(0, 2*np.pi, 700)
+    x_full = a * np.cos(tt)
+    y_full = a * np.sin(tt)
+    fig.add_trace(go.Scatter(
+        x=x_full, y=y_full,
+        mode="lines",
+        line=dict(color="rgba(120,120,120,0.18)", width=2),
+        hoverinfo="skip",
+        showlegend=False
+    ))
+
+    # Arco selecionado
+    # Convenção do app:
+    # 0° no topo, crescendo no sentido anti-horário
+    # Parametrização:
+    # x = -a sin(beta), y = a cos(beta), beta de 0 a theta
+    if theta_deg > 0:
+        beta = np.linspace(0, theta_rad, max(60, int(2.2 * theta_deg) + 2))
+        arc_x = -a * np.sin(beta)
+        arc_y =  a * np.cos(beta)
+
+        fig.add_trace(go.Scatter(
+            x=arc_x, y=arc_y,
+            mode="lines",
+            line=dict(color=arc_color, width=5),
+            hoverinfo="skip",
+            showlegend=False
+        ))
+
+        # Marca início do arco (topo)
+        fig.add_trace(go.Scatter(
+            x=[0], y=[a],
+            mode="markers",
+            marker=dict(size=8, color=arc_color),
+            hoverinfo="skip",
+            showlegend=False
+        ))
+
+        # Marca fim do arco
+        x_end_arc = -a * np.sin(theta_rad)
+        y_end_arc =  a * np.cos(theta_rad)
+        fig.add_trace(go.Scatter(
+            x=[x_end_arc], y=[y_end_arc],
+            mode="markers",
+            marker=dict(size=8, color=arc_color),
+            hoverinfo="skip",
+            showlegend=False
+        ))
+    else:
+        # Para 0°, marca apenas o topo
+        fig.add_trace(go.Scatter(
+            x=[0], y=[a],
+            mode="markers",
+            marker=dict(size=8, color="black"),
+            hoverinfo="skip",
+            showlegend=False
+        ))
+
+    # Ponto P no centro
     fig.add_trace(go.Scatter(
         x=[0], y=[0],
         mode="markers+text",
@@ -264,52 +359,84 @@ def make_scene_figure(a, lmbda, Q, Ex):
         showlegend=False
     ))
 
-    # =========================
-    # Vetor E
-    # =========================
-    max_arrow_len = 0.30 * (X_RIGHT - X_LEFT)
+    # Vetores Ex, Ey e E
+    max_arrow_len = 0.34 * (X_RIGHT - X_LEFT)
     min_arrow_len = 0.08 * (X_RIGHT - X_LEFT)
-    frac = 0.0 if E_MAX_SCENE == 0 else min(1.0, abs(Ex) / E_MAX_SCENE)
-    arrow_len = min_arrow_len + (max_arrow_len - min_arrow_len) * np.sqrt(frac)
-    dx = arrow_len if Ex >= 0 else -arrow_len
 
-    x_end = clamp(dx, X_LEFT + 0.03*(X_RIGHT-X_LEFT), X_RIGHT - 0.03*(X_RIGHT-X_LEFT))
+    frac = 0.0 if E_MAX_SCENE == 0 else min(1.0, abs(Emod) / E_MAX_SCENE)
+    arrow_len = 0.0 if Emod == 0 else (min_arrow_len + (max_arrow_len - min_arrow_len) * np.sqrt(frac))
 
-    fig.add_annotation(
-        x=x_end, y=0,
-        ax=0, ay=0,
-        xref="x", yref="y",
-        axref="x", ayref="y",
-        showarrow=True,
-        arrowhead=3,
-        arrowsize=1.1,
-        arrowwidth=4,
-        arrowcolor="green"
-    )
+    if Emod > 0:
+        scale = arrow_len / Emod
+        dx = Ex * scale
+        dy = Ey * scale
 
-    # Caixa do campo
-    box_x = clamp(0.20 * BASE, X_LEFT + 0.20*BASE, X_RIGHT - 0.55*BASE)
-    box_y = 0.38 * Y_LIM
+        # Componente Ex (laranja)
+        fig.add_annotation(
+            x=dx, y=0,
+            ax=0, ay=0,
+            xref="x", yref="y",
+            axref="x", ayref="y",
+            showarrow=True,
+            arrowhead=3,
+            arrowsize=1.0,
+            arrowwidth=3,
+            arrowcolor="#ff7f0e"
+        )
 
-    fig.add_annotation(
-        x=box_x, y=box_y,
-        text=f"<b>E</b> = {fmt_html_10(Ex, 'N/C', sig=3)}",
-        showarrow=False,
-        xanchor="left",
-        yanchor="middle",
-        align="left",
-        bgcolor="rgba(255,255,255,0.92)",
-        bordercolor="rgba(0,0,0,0.55)",
-        borderwidth=1,
-        font=dict(size=13, color="green")
-    )
+        # Componente Ey (roxo), desenhada a partir da ponta de Ex
+        fig.add_annotation(
+            x=dx, y=dy,
+            ax=dx, ay=0,
+            xref="x", yref="y",
+            axref="x", ayref="y",
+            showarrow=True,
+            arrowhead=3,
+            arrowsize=1.0,
+            arrowwidth=3,
+            arrowcolor="#9467bd"
+        )
 
-    # =========================
-    # Cota a
-    # =========================
-    ang = 3*np.pi/4  # raio apontando para o meio do arco à esquerda
-    xr = a * np.cos(ang)
-    yr = a * np.sin(ang)
+        # Vetor resultante E (verde)
+        fig.add_annotation(
+            x=dx, y=dy,
+            ax=0, ay=0,
+            xref="x", yref="y",
+            axref="x", ayref="y",
+            showarrow=True,
+            arrowhead=3,
+            arrowsize=1.1,
+            arrowwidth=4,
+            arrowcolor="green"
+        )
+
+        # Rótulos próximos aos vetores
+        fig.add_annotation(
+            x=dx/2, y=0.07*BASE,
+            text="<b>E<sub>x</sub></b>",
+            showarrow=False,
+            font=dict(size=13, color="#ff7f0e"),
+            bgcolor="rgba(255,255,255,0.85)"
+        )
+        fig.add_annotation(
+            x=dx + 0.08*BASE*np.sign(dx if dx != 0 else 1), y=dy/2,
+            text="<b>E<sub>y</sub></b>",
+            showarrow=False,
+            font=dict(size=13, color="#9467bd"),
+            bgcolor="rgba(255,255,255,0.85)"
+        )
+        fig.add_annotation(
+            x=0.60*dx, y=0.60*dy + 0.06*BASE,
+            text="<b>E</b>",
+            showarrow=False,
+            font=dict(size=13, color="green"),
+            bgcolor="rgba(255,255,255,0.85)"
+        )
+
+    # Cota do raio a
+    beta_mid = theta_rad / 2 if theta_deg > 0 else 0.0
+    xr = -a * np.sin(beta_mid)
+    yr =  a * np.cos(beta_mid)
 
     fig.add_annotation(
         x=xr, y=yr,
@@ -323,16 +450,20 @@ def make_scene_figure(a, lmbda, Q, Ex):
         arrowcolor="black"
     )
     fig.add_annotation(
-        x=0.62 * xr - 0.02*BASE, y=0.62 * yr + 0.05*Y_LIM,
+        x=0.58*xr + 0.06*BASE, y=0.58*yr + 0.05*BASE,
         text=f"a = {fmt_dec_pt(a, 3)} m",
         showarrow=False,
-        font=dict(color="black", size=12)
+        font=dict(color="black", size=12),
+        bgcolor="rgba(255,255,255,0.85)"
     )
 
-    # Caixa fixa com λ
+    # Caixa informativa com λ e θ
     fig.add_annotation(
         x=0.02, y=0.98, xref="paper", yref="paper",
-        text=f"λ = {fmt_html_10(lmbda, 'C/m', sig=3)}",
+        text=(
+            f"λ = {fmt_html_10(lmbda, 'C/m', sig=3)}<br>"
+            f"θ = {theta_deg}°"
+        ),
         showarrow=False,
         align="left",
         bgcolor="rgba(255,255,255,0.92)",
@@ -341,8 +472,40 @@ def make_scene_figure(a, lmbda, Q, Ex):
         font=dict(size=12, color="black")
     )
 
+    # Caixa dos valores do campo
+    fig.add_annotation(
+        x=0.98, y=0.98, xref="paper", yref="paper",
+        text=(
+            f"<b>E<sub>x</sub></b> = {fmt_html_10(Ex, 'N/C', sig=3)}<br>"
+            f"<b>E<sub>y</sub></b> = {fmt_html_10(Ey, 'N/C', sig=3)}<br>"
+            f"<b>|E|</b> = {fmt_html_10(Emod, 'N/C', sig=3)}"
+        ),
+        showarrow=False,
+        xanchor="right",
+        yanchor="top",
+        align="left",
+        bgcolor="rgba(255,255,255,0.94)",
+        bordercolor="rgba(0,0,0,0.55)",
+        borderwidth=1,
+        font=dict(size=12, color="black")
+    )
+
+    # Título dos eixos
+    fig.add_annotation(
+        x=X_RIGHT - 0.04*(X_RIGHT-X_LEFT), y=0.06*BASE,
+        text="<b>x</b>",
+        showarrow=False,
+        font=dict(size=14, color="black")
+    )
+    fig.add_annotation(
+        x=0.05*BASE, y=Y_TOP - 0.05*(Y_TOP-Y_BOTTOM),
+        text="<b>y</b>",
+        showarrow=False,
+        font=dict(size=14, color="black")
+    )
+
     fig.update_layout(
-        height=460,
+        height=520,
         margin=dict(l=10, r=10, t=10, b=10),
         plot_bgcolor="white",
         paper_bgcolor="white",
@@ -350,11 +513,17 @@ def make_scene_figure(a, lmbda, Q, Ex):
         dragmode="pan"
     )
     fig.update_xaxes(range=[X_LEFT, X_RIGHT], visible=False, fixedrange=False)
-    fig.update_yaxes(range=[-Y_LIM, Y_LIM], visible=False, scaleanchor="x", scaleratio=1, fixedrange=True)
+    fig.update_yaxes(
+        range=[Y_BOTTOM, Y_TOP],
+        visible=False,
+        scaleanchor="x",
+        scaleratio=1,
+        fixedrange=True
+    )
 
     return fig
 
-scene = make_scene_figure(a, lmbda, Q, Ex)
+scene = make_scene_figure(a, lmbda, Q, theta_deg, theta_rad, Ex, Ey, Emod)
 st.plotly_chart(
     scene,
     use_container_width=True,
@@ -368,14 +537,30 @@ st.divider()
 # =========================
 st.subheader("Equações")
 
-st.markdown("**Arco de circunferência**")
-st.latex(r"L = \pi a")
+st.markdown("**Comprimento do arco**")
+st.latex(r"L = a\,\theta \qquad (\theta \text{ em rad})")
 
 st.markdown("**Carga total**")
-st.latex(r"Q = \lambda\,L = \lambda(\pi a)")
+st.latex(r"Q = \lambda L = \lambda a \theta")
 
-st.markdown("**Campo elétrico no centro do meio arco**")
-st.latex(r"E_x = \frac{Q}{2\pi^2\varepsilon_0 a^2}")
+st.markdown("**Componentes do campo elétrico no centro**")
+st.markdown(
+    "Adotando o ângulo do arco medido **a partir do topo** e aumentando no **sentido anti-horário**:"
+)
+
+st.latex(r"E_x = \frac{\lambda}{4\pi\varepsilon_0 a}\int_0^{\theta}\sin\beta\,d\beta")
+st.latex(r"E_y = -\,\frac{\lambda}{4\pi\varepsilon_0 a}\int_0^{\theta}\cos\beta\,d\beta")
+
+st.markdown("**Formas integradas**")
+st.latex(r"E_x = \frac{\lambda}{4\pi\varepsilon_0 a}\left(1-\cos\theta\right)")
+st.latex(r"E_y = -\,\frac{\lambda}{4\pi\varepsilon_0 a}\sin\theta")
+
+st.markdown("**Módulo do campo elétrico**")
+st.latex(r"|E| = \sqrt{E_x^2 + E_y^2}")
+st.latex(r"|E| = \frac{|\lambda|}{4\pi\varepsilon_0 a}\sqrt{(1-\cos\theta)^2+\sin^2\theta}")
+
+st.markdown("**Ângulo do campo elétrico**")
+st.latex(r"\alpha_E = \operatorname{atan2}(E_y, E_x)")
 
 st.markdown("**Permissividade do vácuo**")
 st.latex(r"\varepsilon_0 = 8,8\times10^{-12}\ \text{C}^2/\text{N·m}^2")
@@ -387,18 +572,69 @@ st.divider()
 # =========================
 st.subheader("Cálculos")
 
-st.latex(rf"L = \pi a = \pi({fmt_dec_pt(a,3)}) = {fmt_latex_10(L,'m',sig=4)}")
+st.latex(
+    rf"\theta = {theta_deg}^\circ = {fmt_dec_pt(theta_rad, 4)}\ \text{{rad}}"
+)
 
 st.latex(
-    rf"Q = \lambda L = \left({fmt_latex_10(lmbda,'C/m',sig=3)}\right)\left({fmt_latex_10(L,'m',sig=4)}\right)"
+    rf"L = a\theta = ({fmt_dec_pt(a,3)})({fmt_dec_pt(theta_rad,4)}) = {fmt_latex_10(L,'m',sig=4)}"
+)
+
+st.latex(
+    rf"Q = \lambda L = \left({fmt_latex_10(lmbda,'C/m',sig=3)}\right)"
+    rf"\left({fmt_latex_10(L,'m',sig=4)}\right)"
     rf" = {fmt_latex_10(Q,'C',sig=4)}"
 )
 
 st.latex(
-    rf"E_x = \frac{{{fmt_latex_10(Q,'C',sig=4)}}}{{2\pi^2\left(8,8\times10^{{-12}}\right)\left({fmt_dec_pt(a,3)}\right)^2}}"
+    rf"E_x = \frac{{\lambda}}{{4\pi\varepsilon_0 a}}(1-\cos\theta)"
 )
 
-st.latex(rf"E_x = {fmt_latex_10(Ex,'N/C',sig=4)}\quad {sentido_seta}")
+st.latex(
+    rf"E_x = \frac{{{fmt_latex_10(lmbda,'C/m',sig=3)}}}{{4\pi(8,8\times10^{{-12}})({fmt_dec_pt(a,3)})}}"
+    rf"\left(1-\cos\left({fmt_dec_pt(theta_rad,4)}\right)\right)"
+)
+
+st.latex(
+    rf"E_x = {fmt_latex_10(Ex,'N/C',sig=4)}\quad {sx_arrow}"
+)
+
+st.markdown(f"**Sentido de \(E_x\):** {sx_text}")
+
+st.latex(
+    rf"E_y = -\,\frac{{\lambda}}{{4\pi\varepsilon_0 a}}\sin\theta"
+)
+
+st.latex(
+    rf"E_y = -\,\frac{{{fmt_latex_10(lmbda,'C/m',sig=3)}}}{{4\pi(8,8\times10^{{-12}})({fmt_dec_pt(a,3)})}}"
+    rf"\sin\left({fmt_dec_pt(theta_rad,4)}\right)"
+)
+
+st.latex(
+    rf"E_y = {fmt_latex_10(Ey,'N/C',sig=4)}\quad {sy_arrow}"
+)
+
+st.markdown(f"**Sentido de \(E_y\):** {sy_text}")
+
+st.latex(
+    rf"|E| = \sqrt{{E_x^2 + E_y^2}}"
+)
+
+st.latex(
+    rf"|E| = \sqrt{{\left({fmt_latex_10(Ex,'N/C',sig=4)}\right)^2 + \left({fmt_latex_10(Ey,'N/C',sig=4)}\right)^2}}"
+)
+
+st.latex(
+    rf"|E| = {fmt_latex_10(Emod,'N/C',sig=4)}"
+)
+
+if angE is None:
+    st.markdown("**Ângulo do campo elétrico:** campo nulo (ângulo indefinido).")
+else:
+    st.latex(
+        rf"\alpha_E = \operatorname{{atan2}}(E_y,E_x) = {fmt_dec_pt(angE,2)}^\circ"
+    )
+    st.markdown(f"**Direção do vetor \(\vec E\):** {sentido_resultante}")
 
 st.divider()
 
@@ -407,17 +643,38 @@ st.divider()
 # =========================
 st.subheader("Gráficos")
 
-def curve_E_vs_a(lmbda):
+def curve_Emod_vs_a(lmbda, theta_rad):
     aas = np.linspace(A_MIN, A_MAX, 450)
-    E = field_center_formula_lambda(lmbda, aas)
-    return aas, E
+    Ex_arr, Ey_arr = field_components_lambda(lmbda, aas, theta_rad)
+    E_arr = field_magnitude(Ex_arr, Ey_arr)
+    return aas, E_arr
 
-def curve_E_vs_Q(a):
-    Qmin = (L_U_MIN * 1e-6) * np.pi * a
-    Qmax = (L_U_MAX * 1e-6) * np.pi * a
+def curve_Emod_vs_Q(a, theta_rad):
+    """
+    Para θ fixo:
+        L = aθ
+        λ = Q / L  (se L != 0)
+    """
+    L_local = arc_length(a, theta_rad)
+
+    # Se theta = 0, o arco não existe fisicamente (L=0, Q=0 e E=0)
+    if np.isclose(L_local, 0.0, atol=1e-15):
+        Qs = np.array([-1e-12, 0.0, 1e-12])
+        Es = np.array([0.0, 0.0, 0.0])
+        return Qs, Es, -1e-12, 1e-12
+
+    Qmin = (L_U_MIN * 1e-6) * L_local
+    Qmax = (L_U_MAX * 1e-6) * L_local
+
+    if np.isclose(Qmin, Qmax, atol=1e-20):
+        Qmin -= 1e-12
+        Qmax += 1e-12
+
     Qs = np.linspace(Qmin, Qmax, 450)
-    E = field_center_formula(Qs, a)
-    return Qs, E, Qmin, Qmax
+    lambdas = Qs / L_local
+    Ex_arr, Ey_arr = field_components_lambda(lambdas, a, theta_rad)
+    E_arr = field_magnitude(Ex_arr, Ey_arr)
+    return Qs, E_arr, Qmin, Qmax
 
 def style_axes_black(fig):
     fig.update_xaxes(
@@ -440,13 +697,13 @@ def style_axes_black(fig):
     )
     return fig
 
-aas, Ea = curve_E_vs_a(lmbda)
-Qs, EQ, Q_MIN_AXIS, Q_MAX_AXIS = curve_E_vs_Q(a)
+aas, Ea = curve_Emod_vs_a(lmbda, theta_rad)
+Qs, EQ, Q_MIN_AXIS, Q_MAX_AXIS = curve_Emod_vs_Q(a, theta_rad)
 
-max_abs = float(np.max(np.abs(np.concatenate([Ea, EQ]))))
-if max_abs == 0:
-    max_abs = 1.0
-YMAX = 1.08 * max_abs
+max_val = float(np.max(np.concatenate([np.asarray(Ea, dtype=float), np.asarray(EQ, dtype=float), np.array([Emod])])))
+if max_val == 0:
+    max_val = 1.0
+YMAX = 1.08 * max_val
 
 PLOT_CFG_STATIC = {
     "staticPlot": True,
@@ -459,10 +716,18 @@ gx1, gx2 = st.columns(2)
 
 with gx1:
     fig1 = go.Figure()
-    fig1.add_trace(go.Scatter(x=aas, y=Ea, mode="lines", line=dict(color="#2ca02c", width=3)))
-    fig1.add_trace(go.Scatter(x=[a], y=[Ex], mode="markers", marker=dict(color="red", size=10)))
+    fig1.add_trace(go.Scatter(
+        x=aas, y=Ea,
+        mode="lines",
+        line=dict(color="#2ca02c", width=3)
+    ))
+    fig1.add_trace(go.Scatter(
+        x=[a], y=[Emod],
+        mode="markers",
+        marker=dict(color="red", size=10)
+    ))
     fig1.update_layout(
-        title="Campo elétrico em função do raio a",
+        title="Módulo do campo elétrico em função do raio a",
         title_font=dict(color="black"),
         height=430,
         margin=dict(l=60, r=18, t=65, b=95),
@@ -471,16 +736,24 @@ with gx1:
         showlegend=False
     )
     fig1.update_xaxes(title="a (m)", range=[A_MIN, A_MAX], zeroline=True)
-    fig1.update_yaxes(title="Eₓ (N/C)", range=[-YMAX, YMAX], zeroline=True)
+    fig1.update_yaxes(title="|E| (N/C)", range=[0, YMAX], zeroline=True)
     style_axes_black(fig1)
     st.plotly_chart(fig1, use_container_width=True, config=PLOT_CFG_STATIC)
 
 with gx2:
     fig2 = go.Figure()
-    fig2.add_trace(go.Scatter(x=Qs, y=EQ, mode="lines", line=dict(color="#9467bd", width=3)))
-    fig2.add_trace(go.Scatter(x=[Q], y=[Ex], mode="markers", marker=dict(color="red", size=10)))
+    fig2.add_trace(go.Scatter(
+        x=Qs, y=EQ,
+        mode="lines",
+        line=dict(color="#9467bd", width=3)
+    ))
+    fig2.add_trace(go.Scatter(
+        x=[Q], y=[Emod],
+        mode="markers",
+        marker=dict(color="red", size=10)
+    ))
     fig2.update_layout(
-        title="Campo elétrico em função da carga total Q",
+        title="Módulo do campo elétrico em função da carga total Q",
         title_font=dict(color="black"),
         height=430,
         margin=dict(l=60, r=18, t=65, b=95),
@@ -489,8 +762,25 @@ with gx2:
         showlegend=False
     )
     fig2.update_xaxes(title="Q (C)", range=[Q_MIN_AXIS, Q_MAX_AXIS], zeroline=True)
-    fig2.update_yaxes(title="Eₓ (N/C)", range=[-YMAX, YMAX], zeroline=True)
+    fig2.update_yaxes(title="|E| (N/C)", range=[0, YMAX], zeroline=True)
     style_axes_black(fig2)
     st.plotly_chart(fig2, use_container_width=True, config=PLOT_CFG_STATIC)
 
 st.caption("🔴 O ponto vermelho indica a situação atual.")
+
+# =========================
+# Observação final
+# =========================
+with st.expander("Convenção angular usada no app"):
+    st.markdown(
+        """
+        Neste simulador, o arco é definido por um único ângulo \\(\\theta\\):
+        - **0°**: topo do círculo
+        - o arco cresce no **sentido anti-horário**
+        - o campo elétrico \\(\\vec E\\) é mostrado com:
+          - componente **x**: \\(E_x\\)
+          - componente **y**: \\(E_y\\)
+          - módulo: \\(|E|\\)
+          - ângulo do vetor em relação ao eixo **+x**
+        """
+    )
