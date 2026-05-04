@@ -649,7 +649,7 @@ if angE is None:
     st.markdown("**Ângulo do campo elétrico:** campo nulo (ângulo indefinido).")
 else:
     st.latex(
-        rf"\alpha_E = \operatorname{{atan2}}(E_y,E_x) = {fmt_dec_pt(angE,2)}^\circ"
+        rf"\alpha_E = {fmt_dec_pt(angE,2)}^\circ"
     )
     
 st.divider()
